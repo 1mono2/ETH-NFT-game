@@ -24,6 +24,15 @@ contract MyEpicGame is ERC721 {
         uint256 attackDamage;
     }
 
+    struct BigBoss {
+        string name;
+        string imageURI;
+        uint256 maxHp;
+        uint256 hp;
+        uint256 attackDamage;
+    }
+    BigBoss public bigBoss;
+
     //OpenZeppelin が提供する tokenIds を簡単に追跡するライブラリを呼び出しています。
     using Counters for Counters.Counter;
     // tokenIdはNFTの一意な識別子で、0, 1, 2, .. N のように付与されます。
@@ -38,16 +47,46 @@ contract MyEpicGame is ERC721 {
     // ユーザーのアドレスと NFT の tokenId を紐づける mapping を作成しています。
     mapping(address => uint256) public nftHolders;
 
+    // ユーザーが NFT を Mint したこと示すイベント
+    event CharacterMinted(
+        address sender,
+        uint256 tokenId,
+        uint256 characterIndex
+    );
+
+    // ボスへの攻撃が完了したことを示すイベント
+    event AttackCompleted(uint newBossHp, uint newPlayerHp);
+
     constructor(
         // プレイヤーが新しく NFT キャラクターを Mint する際に、キャラクターを初期化するために渡されるデータを設定しています。これらの値は フロントエンド（js ファイル）から渡されます。
         string[] memory characterNames,
         string[] memory characterImageURIs,
         uint256[] memory characterMaxHp,
-        uint256[] memory characterAttackDamage
+        uint256[] memory characterAttackDamage,
+        // boss argument
+        string memory bossNames,
+        string memory bossImageURIs,
+        uint bossMaxHp,
+        uint bossAttackDamage
     )
         // 作成するNFTの名前とそのシンボルをERC721規格に渡しています。
         ERC721("OnePiece", "ONEPIESE")
     {
+        // ボスを初期化します。ボスの情報をグローバル状態変数 "bigBoss"に保存します。
+        bigBoss = BigBoss({
+            name: bossNames,
+            imageURI: bossImageURIs,
+            maxHp: bossMaxHp,
+            hp: bossMaxHp,
+            attackDamage: bossAttackDamage
+        });
+        console.log(
+            "Done initializing boss %s with HP %s, and damage %s",
+            bigBoss.name,
+            bigBoss.hp,
+            bigBoss.attackDamage
+        );
+
         // ゲームで扱う全てのキャラクターをループ処理で呼び出し、それぞれのキャラクターに付与されるデフォルト値をコントラクトに保存します。
         // 後でNFTを作成する際に使用します。
         for (uint256 i = 0; i < characterNames.length; i += 1) {
@@ -104,6 +143,94 @@ contract MyEpicGame is ERC721 {
 
         // 次に使用する人のためにtokenIdをインクリメントします。
         _tokenIds.increment();
+
+        // ユーザーが NFT を Mint したことをフロントエンドに伝えます。
+        emit CharacterMinted(msg.sender, newItemId, _characterIndex);
+    }
+
+    function attackBoss() public {
+        // 1. プレイヤーのNFTの状態を取得します。
+        uint256 nftTokenIdOfPlayer = nftHolders[msg.sender];
+        CharacterAttributes storage player = nftHolderAttributes[
+            nftTokenIdOfPlayer
+        ];
+        console.log(
+            "Player %s is attacking. Has %s HP and %s AD",
+            player.name,
+            player.hp,
+            player.attackDamage
+        );
+        console.log(
+            "Boss %s has %s HP and %s AD",
+            bigBoss.name,
+            bigBoss.hp,
+            bigBoss.attackDamage
+        );
+
+        // 2. プレイヤーのHPが0以上であることを確認する。
+        require(player.hp > 0, "Player must have HP to attack");
+        // 3. ボスのHPが0以上であることを確認する。
+        require(bigBoss.hp > 0, "Boss must have HP to be attacked");
+
+        // 4. プレイヤーの攻撃力をボスのHPから減算する。
+        if (bigBoss.hp > player.attackDamage) {
+            bigBoss.hp = bigBoss.hp - player.attackDamage;
+        } else {
+            bigBoss.hp = 0;
+        }
+
+        // 5. ボスの攻撃力をプレイヤーのHPから減算する。
+        if (player.hp > bigBoss.attackDamage) {
+            player.hp = player.hp - bigBoss.attackDamage;
+        } else {
+            player.hp = 0;
+        }
+
+        // プレイヤーの攻撃をターミナルに出力する。
+        console.log(
+            "Player %s attacked Boss %s. Boss HP is now %s",
+            player.name,
+            bigBoss.name,
+            bigBoss.hp
+        );
+        // ボスの攻撃をターミナルに出力する。
+        console.log(
+            "Boss %s attacked Player %s. Player HP is now %s",
+            bigBoss.name,
+            player.name,
+            player.hp
+        );
+
+        // ボスへの攻撃が完了したことをフロントエンドに伝えます。
+        emit AttackCompleted(bigBoss.hp, player.hp);
+    }
+
+    function checkIfUserHasNFT()
+        public
+        view
+        returns (CharacterAttributes memory)
+    {
+        // ユーザーの tokenId を取得します。
+        uint256 nftTokenId = nftHolders[msg.sender];
+
+        // // ユーザーがすでにtokenIdを持っている場合、そのキャラクターの属性情報を返します。
+        if (nftTokenId > 0) {
+            return nftHolderAttributes[nftTokenId];
+        }
+        // それ以外の場合は、空文字を返します。
+        return CharacterAttributes(0, "", "", 0, 0, 0);
+    }
+
+    function getAllDefaultCharacters()
+        public
+        view
+        returns (CharacterAttributes[] memory)
+    {
+        return defaultCharacters;
+    }
+
+    function getBigBoss() public view returns (BigBoss memory) {
+        return bigBoss;
     }
 
     // nftHolderAttributes を更新して、tokenURI を添付する関数を作成

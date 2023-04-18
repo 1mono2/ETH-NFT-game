@@ -1,4 +1,5 @@
 const main = async () => {
+    [owner, randomPerson] = await hre.ethers.getSigners();
     // MyEpicGame is compiled and deployed to the blockchain
     const gameContractFactory = await hre.ethers.getContractFactory('MyEpicGame');
     // Create a new blockchain
@@ -10,28 +11,35 @@ const main = async () => {
             "https://i.imgur.com/pCMZeiM.png",
         ],
         [100, 200, 300],
-        [100, 50, 25]
+        [100, 50, 25],
+        "CROCODILE", // Bossの名前
+        "https://i.imgur.com/BehawOh.png", // Bossの画像
+        1000, // BossのHP
+        50 // Bossの攻撃力
     );
     // deploy the contract to local blockchain
     const nftGame = await gameContract.deployed();
 
     console.log("Contract deployed to:", nftGame.address);
-    console.log("Contract deployed by:", nftGame.deployer);
+    console.log("Contract deployed by:", owner.address);
 
     // 再代入可能な変数 txn を宣言
     let txn;
     // 3体のNFTキャラクターの中から、3番目のキャラクターを Mint しています。
-    txn = await gameContract.mintCharacterNFT(2);
+    txn = await nftGame.mintCharacterNFT(2);
     // Minting が仮想マイナーにより、承認されるのを待ちます。
     await txn.wait();
 
-    // NFTのURIの値を取得します。tokenURI は ERC721 から継承した関数です。
-    let returnedTokenUri = await gameContract.tokenURI(1);
-    console.log("Token URI:", returnedTokenUri)
+    txn = await gameContract.attackBoss();
+    await txn.wait();
+    txn = await gameContract.attackBoss();
+    await txn.wait();
 
-    // NFTの所有者のアドレスを取得します。ownerOf は ERC721 から継承した関数です。
-    let nftOwner = await gameContract.ownerOf(1);
-    console.log("NFT Owner:", nftOwner);
+    // NFTのURIの値を取得します。tokenURI は ERC721 から継承した関数です。
+    //let returnedTokenUri = await gameContract.tokenURI(1);
+    //console.log("Token URI:", returnedTokenUri)
+
+
 }
 
 const runMain = async () => {
